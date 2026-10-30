@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS conversations;
+DROP TABLE IF EXISTS data_sources;
+DROP TABLE IF EXISTS widgets;
+DROP TABLE IF EXISTS dashboards;
+DROP TABLE IF EXISTS projects;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS memberships;
+DROP TABLE IF EXISTS organizations;
+DROP TABLE IF EXISTS users;
