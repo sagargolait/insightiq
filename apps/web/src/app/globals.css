@@ -1,18 +1,207 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * InsightIQ — "Enterprise" design system (.agents/skills/enterprise).
+ * Cloud-platform aesthetic: zinc-950 surface, #0C5CAB brand blue, glass panels,
+ * soft shadows, 8px radius, IBM Plex Sans, 8pt grid. Dark is the primary theme;
+ * light mirrors it on zinc-50.
+ *
+ * Accessibility note: #0C5CAB is only 2.97:1 on #09090b, so it's used for
+ * fills (white text = 6.7:1) in both themes, while blue *text/icons* use
+ * --brand-text (#60a5fa in dark = 7.8:1). Use `text-brand`, not `text-primary`.
+ */
 :root {
-  color-scheme: dark;
-  --bg: #090e1a;
-  --panel: #111a2b;
-  --muted: #91a0b8;
-  --line: rgba(148, 163, 184, .16);
-  --accent: #8b9cff;
+  --background: #fafafa;
+  --foreground: #09090b;
+  --card: rgb(255 255 255 / 0.72);
+  --card-foreground: #09090b;
+  --popover: #ffffff;
+  --popover-foreground: #09090b;
+  --primary: #0c5cab;
+  --primary-hover: #0a4a8a;
+  --primary-foreground: #ffffff;
+  --brand-text: #0c5cab;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --accent: #eef4fb;
+  --accent-foreground: #0a4a8a;
+  --destructive: #dc2626;
+  --success: #047857;
+  --warning: #b45309;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
+  --ring: #0c5cab;
+  --chart-1: #0c5cab;
+  --chart-2: #0891b2;
+  --chart-3: #d97706;
+  --chart-4: #7c3aed;
+  --chart-5: #059669;
+  --radius: 0.5rem;
+  --sidebar: #eef0f3;
+  --sidebar-foreground: #27272a;
+  --sidebar-primary: #0c5cab;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e4e4e7;
+  --sidebar-accent-foreground: #09090b;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #0c5cab;
+
+  --glow: rgb(12 92 171 / 0.08);
+  --panel-highlight: rgb(255 255 255 / 0.9);
+  --shadow-panel: 0 1px 2px rgb(9 9 11 / 0.04), 0 8px 24px -12px rgb(9 9 11 / 0.08);
 }
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  background: radial-gradient(ellipse at 50% -20%, #1c2a4a 0, var(--bg) 55%);
-  color: #eef2ff;
-  font-family: Arial, Helvetica, sans-serif;
+
+.dark {
+  --background: #0b0d12;
+  --foreground: #f4f6fa;
+  --card: rgb(22 26 34 / 0.62);
+  --card-foreground: #fafafa;
+  --popover: #141821;
+  --popover-foreground: #fafafa;
+  --primary: #0c5cab;
+  --primary-hover: #1166bd;
+  --primary-foreground: #ffffff;
+  --brand-text: #60a5fa;
+  --secondary: #1c212c;
+  --secondary-foreground: #f4f6fa;
+  --muted: #161a23;
+  --muted-foreground: #9aa3b2;
+  --accent: rgb(12 92 171 / 0.16);
+  --accent-foreground: #bfdbfe;
+  --destructive: #ef4444;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --border: rgb(255 255 255 / 0.08);
+  --input: rgb(255 255 255 / 0.12);
+  --ring: #3b8eea;
+  --chart-1: #3b8eea;
+  --chart-2: #22d3ee;
+  --chart-3: #f59e0b;
+  --chart-4: #a78bfa;
+  --chart-5: #10b981;
+  --sidebar: #07080b;
+  --sidebar-foreground: #c9cfda;
+  --sidebar-primary: #0c5cab;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgb(255 255 255 / 0.06);
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-ring: #3b8eea;
+
+  --glow: rgb(37 117 214 / 0.28);
+  --panel-highlight: rgb(255 255 255 / 0.07);
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -16px rgb(0 0 0 / 0.6);
 }
-a { color: inherit; text-decoration: none; }
+
+@theme inline {
+  --font-sans: var(--font-plex-sans);
+  --font-heading: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-brand: var(--brand-text);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --shadow-panel: var(--shadow-panel);
+  /* Skill radii: sm 4px, md 8px. */
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.5);
+  --radius-4xl: calc(var(--radius) * 3);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Subtle brand glow + faint vignette; fixed so panels blur a stable backdrop. */
+    background-image:
+      radial-gradient(60rem 30rem at 15% -10%, var(--glow), transparent 70%),
+      radial-gradient(50rem 30rem at 100% 0%, color-mix(in srgb, var(--chart-4) 6%, transparent), transparent 70%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  /* Glass panel: translucent surface, blur, hairline border, top highlight. */
+  .panel {
+    @apply bg-card backdrop-blur-xl;
+    background-image: linear-gradient(180deg, var(--panel-highlight), transparent 40%);
+    box-shadow:
+      inset 0 1px 0 var(--panel-highlight),
+      var(--shadow-panel);
+  }
+
+  /* Brand-gradient headline text. */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(100deg, var(--foreground) 30%, var(--brand-text) 75%, var(--chart-2));
+  }
+
+  /* Faint engineering grid, faded at the edges. */
+  .bg-grid {
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+
+  /* Skill "label-caps": 12px uppercase metadata label. */
+  .label-caps {
+    @apply text-xs font-medium tracking-[0.06em] text-muted-foreground uppercase;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

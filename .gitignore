@@ -8,3 +8,10 @@ node_modules/
 coverage/
 dist/
 *.log
+*.tsbuildinfo
+
+# curl cookie jars (contain live session tokens)
+cookies.txt
+
+# local agent scratch
+.agents/
