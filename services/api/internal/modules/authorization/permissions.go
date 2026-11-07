@@ -25,6 +25,7 @@ const (
 	ViewDashboards   Permission = "dashboards:view"
 	CreateDashboards Permission = "dashboards:create"
 	EditDashboards   Permission = "dashboards:edit"
+	DeleteDashboards Permission = "dashboards:delete"
 
 	ManageIntegrations Permission = "integrations:manage"
 )
@@ -35,13 +36,13 @@ var matrix = map[string]map[Permission]struct{}{
 	RoleOwner: set(
 		ViewOrganization, DeleteOrganization,
 		ViewMembers, ManageMembers, ManageOwners,
-		ViewDashboards, CreateDashboards, EditDashboards,
+		ViewDashboards, CreateDashboards, EditDashboards, DeleteDashboards,
 		ManageIntegrations,
 	),
 	RoleAdmin: set(
 		ViewOrganization,
 		ViewMembers, ManageMembers,
-		ViewDashboards, CreateDashboards, EditDashboards,
+		ViewDashboards, CreateDashboards, EditDashboards, DeleteDashboards,
 		ManageIntegrations,
 	),
 	RoleAnalyst: set(
