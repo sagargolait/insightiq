@@ -1,0 +1,383 @@
+openapi: 3.1.0
+info:
+  title: InsightIQ Dashboards & Widgets API
+  version: "1.0.0"
+  description: >
+    Organization-scoped dashboards and their widgets. All routes sit behind the
+    session cookie (`insightiq_session`) set at login and are tenant-isolated by
+    row-level security: a request can only ever see rows belonging to the
+    organization named in its path.
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: Dashboards
+  - name: Widgets
+
+security:
+  - sessionCookie: []
+
+paths:
+  /orgs/{orgID}/dashboards:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+    post:
+      tags: [Dashboards]
+      summary: Create a dashboard
+      description: Requires the `dashboards:create` permission (owner, admin, analyst).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateDashboardRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/DashboardCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/OrganizationNotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    get:
+      tags: [Dashboards]
+      summary: List dashboards
+      description: Requires `dashboards:view` (any member). Ordered newest first.
+      responses:
+        "200": { $ref: "#/components/responses/DashboardList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/OrganizationNotFound" }
+
+  /orgs/{orgID}/dashboards/{dashboardID}:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+      - $ref: "#/components/parameters/DashboardID"
+    get:
+      tags: [Dashboards]
+      summary: Get a dashboard
+      description: Requires `dashboards:view`.
+      responses:
+        "200": { $ref: "#/components/responses/DashboardOK" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/DashboardNotFound" }
+    patch:
+      tags: [Dashboards]
+      summary: Update a dashboard
+      description: >
+        Requires `dashboards:edit` (owner, admin, analyst). Only the fields
+        present in the body change; omit a field to leave it untouched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateDashboardRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/DashboardOK" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/DashboardNotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      tags: [Dashboards]
+      summary: Delete a dashboard
+      description: >
+        Requires `dashboards:delete` (owner, admin only). Cascades to the
+        dashboard's widgets.
+      responses:
+        "204": { description: Deleted. No body. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/DashboardNotFound" }
+
+  /orgs/{orgID}/dashboards/{dashboardID}/widgets:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+      - $ref: "#/components/parameters/DashboardID"
+    post:
+      tags: [Widgets]
+      summary: Create a widget
+      description: >
+        Requires `dashboards:edit`. The `config` shape is validated per `type`
+        (see WidgetConfig). `position` and `size` are grid geometry.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateWidgetRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/WidgetCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/DashboardNotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    get:
+      tags: [Widgets]
+      summary: List widgets for a dashboard
+      description: Requires `dashboards:view`. Ordered by creation time.
+      responses:
+        "200": { $ref: "#/components/responses/WidgetList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/DashboardNotFound" }
+
+  /orgs/{orgID}/dashboards/{dashboardID}/widgets/{widgetID}:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+      - $ref: "#/components/parameters/DashboardID"
+      - $ref: "#/components/parameters/WidgetID"
+    get:
+      tags: [Widgets]
+      summary: Get a widget
+      description: Requires `dashboards:view`.
+      responses:
+        "200": { $ref: "#/components/responses/WidgetOK" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/WidgetNotFound" }
+    patch:
+      tags: [Widgets]
+      summary: Update a widget
+      description: >
+        Requires `dashboards:edit`. A widget's `type` is fixed at creation;
+        only `title`, `config`, `position` and `size` can change. A supplied
+        `config` is validated against the stored type.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateWidgetRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/WidgetOK" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/WidgetNotFound" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      tags: [Widgets]
+      summary: Delete a widget
+      description: Requires `dashboards:edit`.
+      responses:
+        "204": { description: Deleted. No body. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/WidgetNotFound" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: insightiq_session
+
+  parameters:
+    OrgID:
+      name: orgID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    DashboardID:
+      name: dashboardID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    WidgetID:
+      name: widgetID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    Dashboard:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        name: { type: string, maxLength: 200 }
+        description: { type: [string, "null"] }
+        layout:
+          type: object
+          description: Opaque layout document (grid arrangement, etc.).
+        created_by: { type: [string, "null"], format: uuid }
+        updated_by: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateDashboardRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: [string, "null"], maxLength: 2000 }
+        layout: { type: object, description: Optional layout object; defaults to {}. }
+
+    UpdateDashboardRequest:
+      type: object
+      additionalProperties: false
+      description: All fields optional; omit to leave unchanged.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        description: { type: [string, "null"], maxLength: 2000 }
+        layout: { type: object }
+
+    WidgetType:
+      type: string
+      enum: [kpi, bar_chart, line_chart, pie_chart, table]
+
+    WidgetConfig:
+      type: object
+      description: >
+        Shape depends on the widget type. Required keys per type:
+          - kpi:        { "metric": <string> }
+          - bar_chart:  { "x": <field>, "y": <field> }
+          - line_chart: { "x": <field>, "y": <field> }
+          - pie_chart:  { "category": <field>, "value": <field> }
+          - table:      { "columns": [<field>, ...] }
+
+    GridRect:
+      type: object
+      description: Grid geometry; coordinates/spans are integers in [0,1000].
+      properties:
+        x: { type: integer, minimum: 0 }
+        y: { type: integer, minimum: 0 }
+        w: { type: integer, minimum: 1 }
+        h: { type: integer, minimum: 1 }
+
+    Widget:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        dashboard_id: { type: string, format: uuid }
+        type: { $ref: "#/components/schemas/WidgetType" }
+        title: { type: string, maxLength: 150 }
+        config: { $ref: "#/components/schemas/WidgetConfig" }
+        position: { $ref: "#/components/schemas/GridRect" }
+        size: { $ref: "#/components/schemas/GridRect" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateWidgetRequest:
+      type: object
+      required: [type, title]
+      additionalProperties: false
+      properties:
+        type: { $ref: "#/components/schemas/WidgetType" }
+        title: { type: string, minLength: 1, maxLength: 150 }
+        config: { $ref: "#/components/schemas/WidgetConfig" }
+        position: { $ref: "#/components/schemas/GridRect" }
+        size: { $ref: "#/components/schemas/GridRect" }
+
+    UpdateWidgetRequest:
+      type: object
+      additionalProperties: false
+      description: Type is immutable; all fields optional.
+      properties:
+        title: { type: string, minLength: 1, maxLength: 150 }
+        config: { $ref: "#/components/schemas/WidgetConfig" }
+        position: { $ref: "#/components/schemas/GridRect" }
+        size: { $ref: "#/components/schemas/GridRect" }
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+      example:
+        error: { code: "DASHBOARD_NOT_FOUND", message: "Dashboard not found" }
+
+  responses:
+    DashboardCreated:
+      description: Dashboard created.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/Dashboard" }
+    DashboardOK:
+      description: A dashboard.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/Dashboard" }
+    DashboardList:
+      description: List of dashboards.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items: { $ref: "#/components/schemas/Dashboard" }
+    WidgetCreated:
+      description: Widget created.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/Widget" }
+    WidgetOK:
+      description: A widget.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/Widget" }
+    WidgetList:
+      description: List of widgets.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items: { $ref: "#/components/schemas/Widget" }
+
+    BadRequest:
+      description: Malformed body, unknown field, or more than one JSON object (code INVALID_REQUEST).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthenticated:
+      description: No valid session (code UNAUTHENTICATED).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Member lacks the required permission (code FORBIDDEN).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    OrganizationNotFound:
+      description: >
+        Organization does not exist or the caller is not a member. Non-members
+        get this rather than 403 so organization IDs cannot be probed
+        (code ORGANIZATION_NOT_FOUND).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    DashboardNotFound:
+      description: Dashboard not found in this organization (code DASHBOARD_NOT_FOUND).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    WidgetNotFound:
+      description: Widget not found on this dashboard (code WIDGET_NOT_FOUND).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Input failed validation (code VALIDATION_ERROR).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

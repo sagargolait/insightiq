@@ -16,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/sagargolait/insightiq/services/api/internal/modules/auth"
+	"github.com/sagargolait/insightiq/services/api/internal/modules/dashboards"
 	"github.com/sagargolait/insightiq/services/api/internal/modules/organizations"
 	"github.com/sagargolait/insightiq/services/api/internal/platform/database"
 )
@@ -135,6 +136,10 @@ func newRouter(db *pgxpool.Pool) http.Handler {
 		organizations.NewService(organizations.NewPostgresRepository(db)),
 	)
 
+	dashboardHandler := dashboards.NewHandler(
+		dashboards.NewService(dashboards.NewPostgresRepository(db)),
+	)
+
 	router.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/register", authHandler.Register)
 		r.Post("/auth/login", authHandler.Login)
@@ -144,6 +149,9 @@ func newRouter(db *pgxpool.Pool) http.Handler {
 			r.Use(authHandler.RequireSession)
 			r.Get("/auth/me", authHandler.Me)
 			r.Mount("/orgs", orgHandler.Routes())
+			// Dashboards and widgets are organization-scoped; the handler
+			// reads orgID from this parent route and uses it as the RLS tenant.
+			r.Mount("/orgs/{orgID}/dashboards", dashboardHandler.Routes())
 			r.Post("/invitations/accept", orgHandler.AcceptInvitation)
 		})
 	})

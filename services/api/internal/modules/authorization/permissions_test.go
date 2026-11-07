@@ -16,6 +16,7 @@ func TestPermissionMatrix(t *testing.T) {
 		ViewDashboards:     {y, y, y, y},
 		CreateDashboards:   {y, y, y, n},
 		EditDashboards:     {y, y, y, n},
+		DeleteDashboards:   {y, y, n, n},
 		ManageMembers:      {y, y, n, n},
 		ManageIntegrations: {y, y, n, n},
 		ManageOwners:       {y, n, n, n},
