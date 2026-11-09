@@ -81,7 +81,7 @@ func (f *fakeRepository) UpdateDashboard(_ context.Context, orgID, dashboardID u
 	if p.Name != nil {
 		d.Name = *p.Name
 	}
-	if p.Description != nil {
+	if p.SetDescription {
 		d.Description = p.Description
 	}
 	if len(p.Layout) > 0 {
@@ -135,6 +135,9 @@ func (f *fakeRepository) ListWidgets(_ context.Context, orgID, dashboardID uuid.
 }
 
 func (f *fakeRepository) GetWidget(_ context.Context, orgID, dashboardID, widgetID uuid.UUID) (Widget, error) {
+	if d, ok := f.dashboards[dashboardID]; !ok || d.OrganizationID != orgID {
+		return Widget{}, ErrDashboardNotFound
+	}
 	wdg, ok := f.widgets[widgetID]
 	if !ok || wdg.OrganizationID != orgID || wdg.DashboardID != dashboardID {
 		return Widget{}, ErrWidgetNotFound
@@ -143,6 +146,9 @@ func (f *fakeRepository) GetWidget(_ context.Context, orgID, dashboardID, widget
 }
 
 func (f *fakeRepository) UpdateWidget(_ context.Context, orgID, dashboardID, widgetID uuid.UUID, p WidgetPatch) (Widget, error) {
+	if d, ok := f.dashboards[dashboardID]; !ok || d.OrganizationID != orgID {
+		return Widget{}, ErrDashboardNotFound
+	}
 	wdg, ok := f.widgets[widgetID]
 	if !ok || wdg.OrganizationID != orgID || wdg.DashboardID != dashboardID {
 		return Widget{}, ErrWidgetNotFound
@@ -164,6 +170,9 @@ func (f *fakeRepository) UpdateWidget(_ context.Context, orgID, dashboardID, wid
 }
 
 func (f *fakeRepository) DeleteWidget(_ context.Context, orgID, dashboardID, widgetID uuid.UUID) error {
+	if d, ok := f.dashboards[dashboardID]; !ok || d.OrganizationID != orgID {
+		return ErrDashboardNotFound
+	}
 	wdg, ok := f.widgets[widgetID]
 	if !ok || wdg.OrganizationID != orgID || wdg.DashboardID != dashboardID {
 		return ErrWidgetNotFound
@@ -400,5 +409,116 @@ func TestUpdateWidgetValidatesConfigAgainstStoredType(t *testing.T) {
 	})
 	if !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("mismatched config: want ErrInvalidInput, got %v", err)
+	}
+}
+
+// --- update semantics (#1, #4) ---------------------------------------------
+
+func TestUpdateDashboardClearsDescriptionWithNull(t *testing.T) {
+	fx := newFixture(t)
+	desc := "has a description"
+	d, err := fx.svc.CreateDashboard(ctx(), fx.owner, fx.orgID, CreateDashboardRequest{
+		Name:        "Board",
+		Description: &desc,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Explicit JSON null clears the column.
+	updated, err := fx.svc.UpdateDashboard(ctx(), fx.owner, fx.orgID, d.ID, UpdateDashboardRequest{
+		Description: json.RawMessage(`null`),
+	})
+	if err != nil {
+		t.Fatalf("clear description: %v", err)
+	}
+	if updated.Description != nil {
+		t.Fatalf("want nil description, got %q", *updated.Description)
+	}
+}
+
+func TestUpdateDashboardOmittedDescriptionIsUnchanged(t *testing.T) {
+	fx := newFixture(t)
+	desc := "keep me"
+	d, err := fx.svc.CreateDashboard(ctx(), fx.owner, fx.orgID, CreateDashboardRequest{
+		Name:        "Board",
+		Description: &desc,
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	newName := "Renamed"
+	updated, err := fx.svc.UpdateDashboard(ctx(), fx.owner, fx.orgID, d.ID, UpdateDashboardRequest{
+		Name: &newName,
+	})
+	if err != nil {
+		t.Fatalf("update name: %v", err)
+	}
+	if updated.Description == nil || *updated.Description != desc {
+		t.Fatalf("description should be unchanged, got %v", updated.Description)
+	}
+}
+
+func TestUpdateDashboardRejectsEmptyPatch(t *testing.T) {
+	fx := newFixture(t)
+	d := seedDashboard(t, fx)
+	_, err := fx.svc.UpdateDashboard(ctx(), fx.owner, fx.orgID, d, UpdateDashboardRequest{})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty dashboard patch: want ErrInvalidInput, got %v", err)
+	}
+}
+
+func TestUpdateWidgetRejectsEmptyPatch(t *testing.T) {
+	fx := newFixture(t)
+	dash := seedDashboard(t, fx)
+	w, err := fx.svc.CreateWidget(ctx(), fx.owner, fx.orgID, dash, CreateWidgetRequest{
+		Type:   WidgetKPI,
+		Title:  "K",
+		Config: json.RawMessage(`{"metric":"x"}`),
+	})
+	if err != nil {
+		t.Fatalf("seed widget: %v", err)
+	}
+	_, err = fx.svc.UpdateWidget(ctx(), fx.owner, fx.orgID, dash, w.ID, UpdateWidgetRequest{})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("empty widget patch: want ErrInvalidInput, got %v", err)
+	}
+}
+
+// --- config value-shape validation (#5) ------------------------------------
+
+func TestCreateWidgetRejectsWrongConfigValueTypes(t *testing.T) {
+	fx := newFixture(t)
+	dash := seedDashboard(t, fx)
+
+	cases := []struct {
+		name string
+		req  CreateWidgetRequest
+	}{
+		{"kpi metric not string", CreateWidgetRequest{Type: WidgetKPI, Title: "K", Config: json.RawMessage(`{"metric":123}`)}},
+		{"kpi metric blank", CreateWidgetRequest{Type: WidgetKPI, Title: "K", Config: json.RawMessage(`{"metric":"  "}`)}},
+		{"table columns not array", CreateWidgetRequest{Type: WidgetTable, Title: "T", Config: json.RawMessage(`{"columns":"a"}`)}},
+		{"table columns empty array", CreateWidgetRequest{Type: WidgetTable, Title: "T", Config: json.RawMessage(`{"columns":[]}`)}},
+		{"bar axis not string", CreateWidgetRequest{Type: WidgetBarChart, Title: "B", Config: json.RawMessage(`{"x":"m","y":null}`)}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := fx.svc.CreateWidget(ctx(), fx.owner, fx.orgID, dash, tc.req)
+			if !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("want ErrInvalidInput, got %v", err)
+			}
+		})
+	}
+}
+
+// --- widget under a missing dashboard (#2) ---------------------------------
+
+func TestGetWidgetUnderMissingDashboardReportsDashboard(t *testing.T) {
+	fx := newFixture(t)
+	missingDashboard := uuid.New()
+	_, err := fx.svc.GetWidget(ctx(), fx.owner, fx.orgID, missingDashboard, uuid.New())
+	if !errors.Is(err, ErrDashboardNotFound) {
+		t.Fatalf("want ErrDashboardNotFound, got %v", err)
 	}
 }

@@ -13,7 +13,6 @@ import (
 )
 
 var (
-	ErrNotFound          = errors.New("not found")
 	ErrDashboardNotFound = errors.New("dashboard not found")
 	ErrWidgetNotFound    = errors.New("widget not found")
 )
@@ -161,7 +160,7 @@ func (r *PostgresRepository) UpdateDashboard(
             RETURNING `+dashboardColumns,
 			dashboardID, orgID,
 			p.Name,
-			p.Description != nil, p.Description,
+			p.SetDescription, p.Description,
 			p.Layout,
 			p.UpdatedBy,
 		)
@@ -280,6 +279,14 @@ func (r *PostgresRepository) ListWidgets(ctx context.Context, orgID, dashboardID
 func (r *PostgresRepository) GetWidget(ctx context.Context, orgID, dashboardID, widgetID uuid.UUID) (Widget, error) {
 	var w Widget
 	err := database.WithTenantTx(ctx, r.db, orgID, func(tx pgx.Tx) error {
+		ok, err := dashboardExists(ctx, tx, orgID, dashboardID)
+		if err != nil {
+			return fmt.Errorf("check dashboard: %w", err)
+		}
+		if !ok {
+			return ErrDashboardNotFound
+		}
+
 		rows, err := tx.Query(ctx, `
             SELECT `+widgetColumns+`
             FROM widgets
@@ -307,6 +314,14 @@ func (r *PostgresRepository) UpdateWidget(
 ) (Widget, error) {
 	var w Widget
 	err := database.WithTenantTx(ctx, r.db, orgID, func(tx pgx.Tx) error {
+		ok, err := dashboardExists(ctx, tx, orgID, dashboardID)
+		if err != nil {
+			return fmt.Errorf("check dashboard: %w", err)
+		}
+		if !ok {
+			return ErrDashboardNotFound
+		}
+
 		rows, err := tx.Query(ctx, `
             UPDATE widgets
             SET title    = COALESCE($4, title),
@@ -335,6 +350,14 @@ func (r *PostgresRepository) UpdateWidget(
 
 func (r *PostgresRepository) DeleteWidget(ctx context.Context, orgID, dashboardID, widgetID uuid.UUID) error {
 	return database.WithTenantTx(ctx, r.db, orgID, func(tx pgx.Tx) error {
+		ok, err := dashboardExists(ctx, tx, orgID, dashboardID)
+		if err != nil {
+			return fmt.Errorf("check dashboard: %w", err)
+		}
+		if !ok {
+			return ErrDashboardNotFound
+		}
+
 		tag, err := tx.Exec(ctx, `
             DELETE FROM widgets
             WHERE id = $1 AND dashboard_id = $2 AND organization_id = $3`,

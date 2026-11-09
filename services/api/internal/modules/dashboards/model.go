@@ -51,11 +51,12 @@ type CreateDashboardRequest struct {
 	Layout      json.RawMessage `json:"layout"`
 }
 
-// UpdateDashboardRequest fields are pointers so an absent field means
-// "leave unchanged" and an explicit value (including empty) means "set".
+// UpdateDashboardRequest fields mean "leave unchanged" when absent. Description
+// is a RawMessage, not a *string, so the service can tell an omitted field
+// (len 0) from an explicit JSON null (clear to NULL) from a string (set).
 type UpdateDashboardRequest struct {
 	Name        *string         `json:"name"`
-	Description *string         `json:"description"`
+	Description json.RawMessage `json:"description"`
 	Layout      json.RawMessage `json:"layout"`
 }
 
@@ -84,12 +85,14 @@ type NewDashboard struct {
 }
 
 // DashboardPatch holds only the fields an update should change; nil means
-// leave the column as-is.
+// leave the column as-is. SetDescription distinguishes "leave description"
+// (false) from "write Description" (true), so an explicit null can clear it.
 type DashboardPatch struct {
-	Name        *string
-	Description *string
-	Layout      json.RawMessage
-	UpdatedBy   uuid.UUID
+	Name           *string
+	SetDescription bool
+	Description    *string
+	Layout         json.RawMessage
+	UpdatedBy      uuid.UUID
 }
 
 type NewWidget struct {

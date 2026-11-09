@@ -214,7 +214,11 @@ components:
     UpdateDashboardRequest:
       type: object
       additionalProperties: false
-      description: All fields optional; omit to leave unchanged.
+      minProperties: 1
+      description: >
+        Omit a field to leave it unchanged. Supply at least one field; an
+        empty object is rejected (422 VALIDATION_ERROR). Sending
+        `"description": null` clears the stored description.
       properties:
         name: { type: string, minLength: 1, maxLength: 200 }
         description: { type: [string, "null"], maxLength: 2000 }
@@ -227,7 +231,8 @@ components:
     WidgetConfig:
       type: object
       description: >
-        Shape depends on the widget type. Required keys per type:
+        Shape depends on the widget type. Required keys per type, each a
+        non-blank string (table columns a non-empty array of non-blank strings):
           - kpi:        { "metric": <string> }
           - bar_chart:  { "x": <field>, "y": <field> }
           - line_chart: { "x": <field>, "y": <field> }
@@ -271,7 +276,11 @@ components:
     UpdateWidgetRequest:
       type: object
       additionalProperties: false
-      description: Type is immutable; all fields optional.
+      minProperties: 1
+      description: >
+        Type is immutable. Supply at least one field; an empty object is
+        rejected (422 VALIDATION_ERROR). config is validated against the
+        widget's stored type.
       properties:
         title: { type: string, minLength: 1, maxLength: 150 }
         config: { $ref: "#/components/schemas/WidgetConfig" }

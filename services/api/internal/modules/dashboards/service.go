@@ -105,6 +105,7 @@ func (s *Service) UpdateDashboard(
 	}
 
 	patch := DashboardPatch{UpdatedBy: actor.ID}
+	changed := false
 
 	if req.Name != nil {
 		name, ok := validateName(*req.Name)
@@ -112,19 +113,28 @@ func (s *Service) UpdateDashboard(
 			return Dashboard{}, ErrInvalidInput
 		}
 		patch.Name = &name
+		changed = true
 	}
-	if req.Description != nil {
-		desc, ok := validateDescription(req.Description)
-		if !ok {
-			return Dashboard{}, ErrInvalidInput
-		}
-		patch.Description = desc
+	dp, ok := parseDescriptionPatch(req.Description)
+	if !ok {
+		return Dashboard{}, ErrInvalidInput
+	}
+	if dp.set {
+		patch.SetDescription = true
+		patch.Description = dp.value
+		changed = true
 	}
 	if len(req.Layout) > 0 {
 		if !validateJSONObject(req.Layout) {
 			return Dashboard{}, ErrInvalidInput
 		}
 		patch.Layout = req.Layout
+		changed = true
+	}
+
+	// An update that changes nothing is a client mistake, not a no-op row bump.
+	if !changed {
+		return Dashboard{}, ErrInvalidInput
 	}
 
 	return s.repo.UpdateDashboard(ctx, orgID, dashboardID, patch)
@@ -204,12 +214,14 @@ func (s *Service) UpdateWidget(
 	// Validate config against the stored type so a partial update cannot slip
 	// in a config that is malformed for that widget.
 	patch := WidgetPatch{}
+	changed := false
 	if req.Title != nil {
 		title, ok := validateTitle(*req.Title)
 		if !ok {
 			return Widget{}, ErrInvalidInput
 		}
 		patch.Title = &title
+		changed = true
 	}
 	if len(req.Config) > 0 {
 		existing, err := s.repo.GetWidget(ctx, orgID, dashboardID, widgetID)
@@ -220,18 +232,25 @@ func (s *Service) UpdateWidget(
 			return Widget{}, ErrInvalidInput
 		}
 		patch.Config = req.Config
+		changed = true
 	}
 	if len(req.Position) > 0 {
 		if !validatePosition(req.Position) {
 			return Widget{}, ErrInvalidInput
 		}
 		patch.Position = req.Position
+		changed = true
 	}
 	if len(req.Size) > 0 {
 		if !validateSize(req.Size) {
 			return Widget{}, ErrInvalidInput
 		}
 		patch.Size = req.Size
+		changed = true
+	}
+
+	if !changed {
+		return Widget{}, ErrInvalidInput
 	}
 
 	return s.repo.UpdateWidget(ctx, orgID, dashboardID, widgetID, patch)

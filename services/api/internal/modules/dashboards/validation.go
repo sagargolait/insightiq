@@ -49,6 +49,34 @@ func validateDescription(desc *string) (*string, bool) {
 	return &trimmed, true
 }
 
+// descriptionPatch is the three-state result of parsing an update's raw
+// description field: omitted (leave as-is), cleared (set NULL), or set.
+type descriptionPatch struct {
+	set   bool    // the field was present in the request
+	value *string // nil means an explicit JSON null (clear); non-nil sets
+}
+
+// parseDescriptionPatch interprets the raw description from an update request.
+// An empty RawMessage means the field was omitted (set=false). A JSON null
+// clears the column; a JSON string is trimmed and length-checked.
+func parseDescriptionPatch(raw json.RawMessage) (descriptionPatch, bool) {
+	if len(raw) == 0 {
+		return descriptionPatch{set: false}, true
+	}
+	if string(raw) == "null" {
+		return descriptionPatch{set: true, value: nil}, true
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return descriptionPatch{}, false
+	}
+	trimmed := strings.TrimSpace(s)
+	if len(trimmed) > maxDescriptionLen {
+		return descriptionPatch{}, false
+	}
+	return descriptionPatch{set: true, value: &trimmed}, true
+}
+
 func validateTitle(title string) (string, bool) {
 	title = strings.TrimSpace(title)
 	if title == "" || len(title) > maxTitleLen {
@@ -128,22 +156,53 @@ func validateConfig(widgetType string, raw json.RawMessage) bool {
 	switch widgetType {
 	case WidgetKPI:
 		// Needs a single metric to display.
-		return has(cfg, "metric")
+		return isNonEmptyString(cfg, "metric")
 	case WidgetBarChart, WidgetLineChart:
 		// Cartesian charts need both axes bound.
-		return has(cfg, "x") && has(cfg, "y")
+		return isNonEmptyString(cfg, "x") && isNonEmptyString(cfg, "y")
 	case WidgetPieChart:
 		// Proportional chart needs a category and a value.
-		return has(cfg, "category") && has(cfg, "value")
+		return isNonEmptyString(cfg, "category") && isNonEmptyString(cfg, "value")
 	case WidgetTable:
-		// Tabular widget needs a column list.
-		return has(cfg, "columns")
+		// Tabular widget needs a non-empty column list.
+		return isNonEmptyStringArray(cfg, "columns")
 	default:
 		return false
 	}
 }
 
-func has(m map[string]json.RawMessage, key string) bool {
-	_, ok := m[key]
-	return ok
+// isNonEmptyString reports whether key holds a JSON string that is not blank
+// after trimming. A missing key, wrong type, or empty string all fail.
+func isNonEmptyString(m map[string]json.RawMessage, key string) bool {
+	raw, ok := m[key]
+	if !ok {
+		return false
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return false
+	}
+	return strings.TrimSpace(s) != ""
+}
+
+// isNonEmptyStringArray reports whether key holds a non-empty JSON array of
+// non-blank strings.
+func isNonEmptyStringArray(m map[string]json.RawMessage, key string) bool {
+	raw, ok := m[key]
+	if !ok {
+		return false
+	}
+	var arr []string
+	if err := json.Unmarshal(raw, &arr); err != nil {
+		return false
+	}
+	if len(arr) == 0 {
+		return false
+	}
+	for _, s := range arr {
+		if strings.TrimSpace(s) == "" {
+			return false
+		}
+	}
+	return true
 }
