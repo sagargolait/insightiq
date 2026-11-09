@@ -1,0 +1,430 @@
+openapi: 3.1.0
+info:
+  title: InsightIQ Data Sources & Analytics API
+  version: "1.0.0"
+  description: >
+    Organization-scoped external data sources (PostgreSQL) and read-only
+    analytics queries against them. All routes sit behind the session cookie
+    (`insightiq_session`) set at login and are tenant-isolated by row-level
+    security: a request can only ever see rows belonging to the organization
+    named in its path.
+
+    Credentials are sealed with AES-256-GCM before storage and are never
+    returned in any response. Query execution is restricted to a single
+    read-only SELECT/WITH statement, with statement timeouts and a hard row cap.
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: Data Sources
+  - name: Schema
+  - name: Analytics
+
+security:
+  - sessionCookie: []
+
+paths:
+  /orgs/{orgID}/data-sources:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+    post:
+      tags: [Data Sources]
+      summary: Create a data source
+      description: >
+        Requires the `datasources:manage` permission (owner, admin). The source
+        starts in `pending` status; call the test endpoint to activate it. The
+        password is encrypted and never echoed back.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateDataSourceRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/DataSourceCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/OrganizationNotFound" }
+        "409": { $ref: "#/components/responses/NameTaken" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    get:
+      tags: [Data Sources]
+      summary: List data sources
+      description: Requires `datasources:view` (any member). Ordered newest first. Never includes credentials.
+      responses:
+        "200": { $ref: "#/components/responses/DataSourceList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/OrganizationNotFound" }
+
+  /orgs/{orgID}/data-sources/{sourceID}:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+      - $ref: "#/components/parameters/SourceID"
+    get:
+      tags: [Data Sources]
+      summary: Get a data source
+      description: Requires `datasources:view`. Never includes credentials.
+      responses:
+        "200": { $ref: "#/components/responses/DataSourceOK" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/DataSourceNotFound" }
+    patch:
+      tags: [Data Sources]
+      summary: Update a data source
+      description: >
+        Requires `datasources:manage`. Omit a field to leave it unchanged.
+        Supplying a new password re-encrypts it. Changing any connection field
+        resets the source to `pending` so it must be re-tested. Type is
+        immutable and cannot be changed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateDataSourceRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/DataSourceOK" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/DataSourceNotFound" }
+        "409": { $ref: "#/components/responses/NameTaken" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      tags: [Data Sources]
+      summary: Delete a data source
+      description: Requires `datasources:manage`. Cascades discovered schema and jobs.
+      responses:
+        "204": { description: Deleted. No body. }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/DataSourceNotFound" }
+
+  /orgs/{orgID}/data-sources/{sourceID}/test:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+      - $ref: "#/components/parameters/SourceID"
+    post:
+      tags: [Data Sources]
+      summary: Test connectivity
+      description: >
+        Requires `datasources:manage`. Decrypts the stored credential and opens
+        a short-lived, read-only connection to the external database. On success
+        the source becomes `active`; on failure it becomes `failed` with a
+        sanitized `last_error` (one of: authentication failed, database
+        unreachable, connection timed out, tls negotiation failed, connection
+        rejected). The failure reason never contains the host or credentials.
+      responses:
+        "200": { $ref: "#/components/responses/DataSourceOK" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/DataSourceNotFound" }
+        "409": { $ref: "#/components/responses/NoCredentials" }
+        "502": { $ref: "#/components/responses/ConnectionFailed" }
+
+  /orgs/{orgID}/data-sources/{sourceID}/schema/refresh:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+      - $ref: "#/components/parameters/SourceID"
+    post:
+      tags: [Schema]
+      summary: Refresh discovered schema
+      description: >
+        Requires `datasources:manage`. Introspects the external database's
+        non-system schemas and replaces the stored metadata. The source must be
+        `active`. Runs synchronously; returns the freshly discovered columns.
+      responses:
+        "200": { $ref: "#/components/responses/SchemaList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/DataSourceNotFound" }
+        "409": { $ref: "#/components/responses/NotActive" }
+        "502": { $ref: "#/components/responses/ConnectionFailed" }
+
+  /orgs/{orgID}/data-sources/{sourceID}/schema:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+      - $ref: "#/components/parameters/SourceID"
+    get:
+      tags: [Schema]
+      summary: Get discovered schema
+      description: Requires `datasources:view`. Returns the stored schema metadata; never includes credentials.
+      responses:
+        "200": { $ref: "#/components/responses/SchemaList" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/DataSourceNotFound" }
+
+  /orgs/{orgID}/data-sources/{sourceID}/query:
+    parameters:
+      - $ref: "#/components/parameters/OrgID"
+      - $ref: "#/components/parameters/SourceID"
+    post:
+      tags: [Analytics]
+      summary: Run a read-only query
+      description: >
+        Requires `analytics:run` (owner, admin, analyst). The source must be
+        `active`. The SQL must be a single read-only statement starting with
+        SELECT or WITH; writes, DDL, multiple statements, and references to
+        system schemas (pg_catalog, information_schema) are rejected with 422.
+        Results are capped at 1000 rows and a 10-second statement timeout;
+        `truncated` is true when the cap was hit. Basic aggregations
+        (count/sum/avg/min/max) are ordinary SELECTs and need no special syntax.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QueryRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/QueryResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/DataSourceNotFound" }
+        "409": { $ref: "#/components/responses/NotActive" }
+        "422": { $ref: "#/components/responses/InvalidQuery" }
+        "502": { $ref: "#/components/responses/ConnectionFailed" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: insightiq_session
+
+  parameters:
+    OrgID:
+      name: orgID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SourceID:
+      name: sourceID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    DataSourceType:
+      type: string
+      enum: [postgres]
+
+    DataSourceStatus:
+      type: string
+      enum: [pending, active, failed, disabled]
+      description: >
+        pending = created, never tested; active = last test succeeded;
+        failed = last test failed (see last_error); disabled = turned off.
+
+    DataSource:
+      type: object
+      description: Credentials are never present on this object.
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        name: { type: string, maxLength: 150 }
+        type: { $ref: "#/components/schemas/DataSourceType" }
+        status: { $ref: "#/components/schemas/DataSourceStatus" }
+        host: { type: string }
+        port: { type: integer }
+        database: { type: string }
+        username: { type: string }
+        last_error:
+          type: [string, "null"]
+          description: Sanitized failure reason from the last test; never contains host or credentials.
+        created_by: { type: [string, "null"], format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateDataSourceRequest:
+      type: object
+      required: [name, type, host, port, database, username, password]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        type: { $ref: "#/components/schemas/DataSourceType" }
+        host: { type: string, minLength: 1, maxLength: 255, description: Hostname or IP literal; no scheme, port, or path. }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        database: { type: string, minLength: 1, maxLength: 128 }
+        username: { type: string, minLength: 1, maxLength: 128 }
+        password: { type: string, minLength: 1, description: Write-only; encrypted at rest and never returned. }
+
+    UpdateDataSourceRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: >
+        Omit a field to leave it unchanged. Supply at least one field; an empty
+        object is rejected (422 VALIDATION_ERROR). A new password re-encrypts the
+        credential. Changing a connection field resets status to pending.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        host: { type: string, minLength: 1, maxLength: 255 }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        database: { type: string, minLength: 1, maxLength: 128 }
+        username: { type: string, minLength: 1, maxLength: 128 }
+        password: { type: string, minLength: 1 }
+
+    SchemaColumn:
+      type: object
+      properties:
+        schema_name: { type: string }
+        table_name: { type: string }
+        column_name: { type: string }
+        data_type: { type: string }
+        ordinal: { type: integer }
+        discovered_at: { type: string, format: date-time }
+
+    QueryRequest:
+      type: object
+      required: [sql]
+      additionalProperties: false
+      properties:
+        sql:
+          type: string
+          description: A single read-only statement starting with SELECT or WITH.
+        page: { type: integer, minimum: 1, description: 1-based page; combined with page_size for OFFSET. }
+        page_size: { type: integer, minimum: 1, maximum: 1000, description: Rows per page; capped at 1000. }
+
+    ColumnMeta:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string, description: Readable Postgres type name (e.g. integer, text, timestamp). }
+
+    QueryResult:
+      type: object
+      properties:
+        columns:
+          type: array
+          items: { $ref: "#/components/schemas/ColumnMeta" }
+        rows:
+          type: array
+          description: Row arrays aligned to columns. Cell types follow the column type.
+          items:
+            type: array
+            items: {}
+        row_count: { type: integer }
+        duration_ms: { type: integer }
+        truncated: { type: boolean, description: True when the 1000-row cap was reached. }
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+      example:
+        error: { code: "DATA_SOURCE_NOT_FOUND", message: "Data source not found" }
+
+  responses:
+    DataSourceCreated:
+      description: Data source created (status pending).
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/DataSource" }
+    DataSourceOK:
+      description: A data source.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/DataSource" }
+    DataSourceList:
+      description: List of data sources.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items: { $ref: "#/components/schemas/DataSource" }
+    SchemaList:
+      description: Discovered schema columns.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items: { $ref: "#/components/schemas/SchemaColumn" }
+    QueryResult:
+      description: Query result set.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: "#/components/schemas/QueryResult" }
+
+    BadRequest:
+      description: Malformed body, unknown field, or more than one JSON object (code INVALID_REQUEST).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthenticated:
+      description: No valid session (code UNAUTHENTICATED).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Member lacks the required permission (code FORBIDDEN).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    OrganizationNotFound:
+      description: >
+        Organization does not exist or the caller is not a member. Non-members
+        get this rather than 403 so organization IDs cannot be probed
+        (code ORGANIZATION_NOT_FOUND).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    DataSourceNotFound:
+      description: Data source not found in this organization (code DATA_SOURCE_NOT_FOUND).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NameTaken:
+      description: A data source with this name already exists in the organization (code NAME_TAKEN).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotActive:
+      description: The data source must pass a connection test before this operation (code NOT_ACTIVE).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NoCredentials:
+      description: The data source has no stored credentials (code NO_CREDENTIALS).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ConnectionFailed:
+      description: >
+        Could not connect to or query the external database (code
+        CONNECTION_FAILED). The message is sanitized and never contains the host
+        or credentials.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Input failed validation (code VALIDATION_ERROR).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    InvalidQuery:
+      description: >
+        The query is empty, is not read-only, contains multiple statements, or
+        references a restricted schema (code INVALID_QUERY or RESULT_TOO_LARGE
+        when the result exceeds the size limit).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

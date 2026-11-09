@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,11 +14,15 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/sagargolait/insightiq/services/api/internal/modules/auth"
 	"github.com/sagargolait/insightiq/services/api/internal/modules/dashboards"
+	"github.com/sagargolait/insightiq/services/api/internal/modules/datasources"
 	"github.com/sagargolait/insightiq/services/api/internal/modules/organizations"
+	"github.com/sagargolait/insightiq/services/api/internal/platform/crypto"
 	"github.com/sagargolait/insightiq/services/api/internal/platform/database"
+	"github.com/sagargolait/insightiq/services/api/internal/platform/observability"
 )
 
 type Config struct {
@@ -64,11 +68,15 @@ func loadConfig() Config {
 func main() {
 	loadDotenv()
 	cfg := loadConfig()
+	logger := observability.NewLogger(cfg.AppEnv)
+	slog.SetDefault(logger)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if cfg.DatabaseURL == "" {
-		log.Fatal("DATABASE_URL is required (see .env.example)")
+		logger.Error("DATABASE_URL is required (see .env.example)")
+		os.Exit(1)
 	}
 
 	db, err := database.NewPool(ctx, database.Config{
@@ -79,7 +87,8 @@ func main() {
 		MaxConnIdleTime: 30 * time.Minute,
 	})
 	if err != nil {
-		log.Fatalf("database: %v", err)
+		logger.Error("database connect failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	defer db.Close()
 
@@ -87,33 +96,76 @@ func main() {
 	// Refuse to start outside development; warn loudly in development.
 	if err := database.CheckRestrictedRole(ctx, db); err != nil {
 		if cfg.AppEnv != "development" {
-			log.Fatalf("database: %v", err)
+			logger.Error("database role check failed", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
-		log.Printf("WARNING: %v — row-level security is NOT enforced. "+
-			"Run `make db-app-role` and connect as insightiq_app.", err)
+		logger.Warn("row-level security is NOT enforced; run `make db-app-role` and connect as insightiq_app",
+			slog.String("error", err.Error()))
 	}
+
+	// Credential encryption for data sources. Missing keys are fatal outside
+	// development; in development we warn so the rest of the API still runs,
+	// and data-source routes fail closed when they try to encrypt.
+	cipher, err := crypto.NewFromEnv()
+	if err != nil {
+		if cfg.AppEnv != "development" {
+			logger.Error("encryption key config failed", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		logger.Warn("data source credentials cannot be encrypted; set the encryption key env vars (see .env.example)",
+			slog.String("error", err.Error()),
+			slog.String("keys_env", crypto.EnvKeys),
+			slog.String("active_version_env", crypto.EnvActiveKeyVersion))
+	}
+
+	// Per-source connection pools for analytics queries. Closed on shutdown.
+	queryExec := datasources.NewExecutor()
+	defer queryExec.Close()
+
+	// The data-source repository and service are shared by the HTTP handler and
+	// the background worker (which drains the schema-discovery job queue).
+	dataSourceRepo := datasources.NewPostgresRepository(db)
+	dataSourceService := datasources.NewService(dataSourceRepo, cipher, datasources.NewConnector(), queryExec)
+
+	// Background worker: runs schema discovery off the HTTP path. Tied to a
+	// context cancelled on shutdown so it stops cleanly.
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	defer stopWorker()
+	worker := datasources.NewWorker(dataSourceRepo, dataSourceService, logger)
+	go worker.Run(workerCtx)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           newRouter(db),
+		Handler:           newRouter(db, logger, datasources.NewHandler(dataSourceService)),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      20 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Printf("InsightIQ API listening on :%s", cfg.Port)
+	logger.Info("InsightIQ API listening", slog.String("port", cfg.Port), slog.String("env", cfg.AppEnv))
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+		logger.Error("server stopped", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 }
 
-func newRouter(db *pgxpool.Pool) http.Handler {
+func newRouter(db *pgxpool.Pool, logger *slog.Logger, dataSourceHandler *datasources.Handler) http.Handler {
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.RealIP)
+	// RequestLogger runs after RequestID so each access log carries the ID and
+	// downstream handlers get a request-scoped logger on the context.
+	router.Use(observability.RequestLogger(logger))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Timeout(15 * time.Second))
+
+	// Prometheus scrape endpoint. Outside /api/v1 and unauthenticated, like health.
+	router.Handle("/metrics", promhttp.Handler())
 
 	router.Get("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -152,6 +204,7 @@ func newRouter(db *pgxpool.Pool) http.Handler {
 			// Dashboards and widgets are organization-scoped; the handler
 			// reads orgID from this parent route and uses it as the RLS tenant.
 			r.Mount("/orgs/{orgID}/dashboards", dashboardHandler.Routes())
+			r.Mount("/orgs/{orgID}/data-sources", dataSourceHandler.Routes())
 			r.Post("/invitations/accept", orgHandler.AcceptInvitation)
 		})
 	})

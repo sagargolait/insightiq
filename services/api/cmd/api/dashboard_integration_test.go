@@ -38,7 +38,7 @@ func TestDashboardTenantIsolationAndRBAC(t *testing.T) {
 		t.Fatalf("TEST_DATABASE_URL must use the insightiq_app role: %v", err)
 	}
 
-	server := httptest.NewServer(newRouter(pool))
+	server := httptest.NewServer(testRouter(t, pool))
 	defer server.Close()
 
 	alice := newSignedInClient(t, server.URL, "dash-alice")
@@ -138,7 +138,7 @@ func TestDashboardViewerIsReadOnly(t *testing.T) {
 	}
 	t.Cleanup(pool.Close)
 
-	server := httptest.NewServer(newRouter(pool))
+	server := httptest.NewServer(testRouter(t, pool))
 	defer server.Close()
 
 	owner := newSignedInClient(t, server.URL, "rbac-owner")

@@ -21,6 +21,9 @@ func TestPermissionMatrix(t *testing.T) {
 		ManageIntegrations: {y, y, n, n},
 		ManageOwners:       {y, n, n, n},
 		DeleteOrganization: {y, n, n, n},
+		ViewDataSources:    {y, y, y, y},
+		ManageDataSources:  {y, y, n, n},
+		RunQueries:         {y, y, y, n},
 	}
 
 	for perm, row := range want {

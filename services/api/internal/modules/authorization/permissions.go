@@ -27,6 +27,10 @@ const (
 	EditDashboards   Permission = "dashboards:edit"
 	DeleteDashboards Permission = "dashboards:delete"
 
+	ViewDataSources   Permission = "datasources:view"
+	ManageDataSources Permission = "datasources:manage" // create, edit, delete, test, refresh schema
+	RunQueries        Permission = "analytics:run"
+
 	ManageIntegrations Permission = "integrations:manage"
 )
 
@@ -37,23 +41,27 @@ var matrix = map[string]map[Permission]struct{}{
 		ViewOrganization, DeleteOrganization,
 		ViewMembers, ManageMembers, ManageOwners,
 		ViewDashboards, CreateDashboards, EditDashboards, DeleteDashboards,
+		ViewDataSources, ManageDataSources, RunQueries,
 		ManageIntegrations,
 	),
 	RoleAdmin: set(
 		ViewOrganization,
 		ViewMembers, ManageMembers,
 		ViewDashboards, CreateDashboards, EditDashboards, DeleteDashboards,
+		ViewDataSources, ManageDataSources, RunQueries,
 		ManageIntegrations,
 	),
 	RoleAnalyst: set(
 		ViewOrganization,
 		ViewMembers,
 		ViewDashboards, CreateDashboards, EditDashboards,
+		ViewDataSources, RunQueries,
 	),
 	RoleViewer: set(
 		ViewOrganization,
 		ViewMembers,
 		ViewDashboards,
+		ViewDataSources,
 	),
 }
 

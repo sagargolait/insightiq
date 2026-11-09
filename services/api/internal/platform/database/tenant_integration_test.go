@@ -109,7 +109,7 @@ func seedTenant(t *testing.T, pool *pgxpool.Pool, label string) tenant {
 		}{
 			{&tn.projectID, `INSERT INTO projects (organization_id, name)
 				VALUES ($1, $2) RETURNING id`, []any{tn.orgID, label + " project"}},
-			{&tn.dashboardID, `INSERT INTO dashboards (organization_id, project_id, title, created_by)
+			{&tn.dashboardID, `INSERT INTO dashboards (organization_id, project_id, name, created_by)
 				VALUES ($1, $2, $3, $4) RETURNING id`, []any{tn.orgID, &tn.projectID, label + " dash", tn.userID}},
 			{&tn.widgetID, `INSERT INTO widgets (organization_id, dashboard_id, type, title)
 				VALUES ($1, $2, 'kpi', $3) RETURNING id`, []any{tn.orgID, &tn.dashboardID, label + " widget"}},
